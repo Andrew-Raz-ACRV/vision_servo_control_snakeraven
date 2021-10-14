@@ -16,3 +16,10 @@ The vision_servo_control_snakeraven uses Eigen to compute the kinematics and con
 1. Go to http://eigen.tuxfamily.org/index.php?title=Main_Page#Download to get the most recent Eigen. 
 2. Download the zip, extract and find the subfolder "Eigen" 
 3. In snake_raven_controller/ and vision_system_snakeraven create the folder 'include' and paste 'Eigen' into the include folder.
+
+## Contact
+
+This code is written by Andrew Razjigaev. If there are queries you can contact him via email: andrew_razjigaev@outlook.com
+
+## Relavent links:
+1. **snake_raven_controller** : This is an expansion on from the original [controller](https://github.com/Andrew-Raz-ACRV/snake_raven_controller)
