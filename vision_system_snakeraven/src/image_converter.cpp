@@ -44,7 +44,8 @@ public:
   ros::Publisher camera_velocity_pub;
 
   //Camera Calibration data and properties:
-  Mat cameraMatrix, distCoeffs;
+  Mat cameraMatrix, distCoeffs, OUTPUT_IMAGE;
+  float scale; //OUTPUT_IMAGE scale
   float height, width; //Image Dimensions in pixels
   float image_sensor[2]; //Dimensions of pixel array in mm
   int frame; //Frame counter
@@ -52,6 +53,11 @@ public:
 
   //State modes:
   modes state; modes new_state; bool status_report;
+
+  //Teleop command from subscriber
+  vector<double> V_teleop;
+  int teleop_hold;
+  int teleop_period;
 
   //Feature Trackers
   Feature_tracker tracker;
@@ -86,6 +92,15 @@ public:
     state = idle;
     new_state = idle;
     status_report = true;
+    scale = 2.5; //scale output image
+
+    //initialise Vteleop and teleop hold limit
+    for (int i = 0; i < 3; ++i)
+    {
+    	V_teleop.push_back(0);
+    }
+    teleop_hold = 0;
+    teleop_period = 20;
 
     //Dimensions of pixel array in mm
     image_sensor[0] = 0.9; image_sensor[1] = 0.9; 
@@ -94,7 +109,7 @@ public:
 
 
     //Set up file to record feature error over time:
-    RECORDING_CAMERA = true; frame_count = 0;
+    RECORDING_CAMERA = false; frame_count = 0;
     if (RECORDING_CAMERA)
 	{
 		this->pFile = fopen("FeatureTrackerIBVSData.csv","w");
@@ -158,6 +173,34 @@ public:
   	else{
   		new_state = idle;
   	}
+
+  	//Teleop data processing:
+  	//Update if non zero input or if its been 'teleop_period' values;
+  	if ((msg.data[1]==0)&&(msg.data[2]==0)&&(msg.data[3]==0))
+  	{
+  		//Don't update for a period for VPC to make better predictions
+  		teleop_hold++;
+  		if (teleop_hold > teleop_period)
+  		{
+	  		//Get teleop command Vc from the next array values 1,2,3
+	  		V_teleop.clear();
+		  	for (int i = 1; i < 4; ++i)
+		  	{
+		  		V_teleop.push_back(msg.data[i]);
+		  	}
+		  	teleop_hold = 0;
+  		}
+  	}
+  	else{
+  		//Get teleop command Vc from the next array values 1,2,3
+  		V_teleop.clear();
+	  	for (int i = 1; i < 4; ++i)
+	  	{
+	  		V_teleop.push_back(msg.data[i]);
+	  	}
+	  	teleop_hold = 0;
+  	}
+
 
   	if (new_state!=state)
   	{
@@ -224,7 +267,9 @@ public:
         //Neglect all detections and just show plain image
         aruco.null_detection();
         tracker.IBVS.Null_Control(); tracker.established = false;
-        cv::imshow(OPENCV_WINDOW, cv_ptr->image);
+        //cv::imshow(OPENCV_WINDOW, cv_ptr->image);
+        cv::resize(cv_ptr->image, OUTPUT_IMAGE, cv::Size(), scale, scale);
+        cv::imshow(OPENCV_WINDOW, OUTPUT_IMAGE);
         break;
       }
       case IBVS_active:
@@ -233,7 +278,7 @@ public:
         if (tracker.established)
         {
           //Track the features moving from the circle
-          tracker.track_target_keypoints(cv_ptr->image);
+          tracker.track_target_keypoints(cv_ptr->image, V_teleop);
           //Show camera velocity:
           //cout << "Wc = " << endl << tracker.IBVS.Wc.transpose() << endl;
         }
@@ -252,7 +297,9 @@ public:
 
         //Neglect other detections and show feature tracker image:
         aruco.null_detection();
-        cv::imshow(OPENCV_WINDOW, tracker.outputImage);
+        //cv::imshow(OPENCV_WINDOW, tracker.outputImage);
+        cv::resize(tracker.outputImage, OUTPUT_IMAGE, cv::Size(), scale, scale);
+        cv::imshow(OPENCV_WINDOW, OUTPUT_IMAGE);
 
         if (RECORDING_CAMERA)
         {
@@ -274,7 +321,10 @@ public:
 
         //Neglect other detections and show feature tracker image:
         aruco.null_detection();
-        cv::imshow(OPENCV_WINDOW, tracker.outputImage);
+        //cv::imshow(OPENCV_WINDOW, tracker.outputImage);
+        //cv::resize(tracker.outputImage, OUTPUT_IMAGE, cv::Size(), scale, scale); //SHOW CIRCLE
+        cv::resize(cv_ptr->image, OUTPUT_IMAGE, cv::Size(), scale, scale); //NOT SHOW CIRCLE
+        cv::imshow(OPENCV_WINDOW, OUTPUT_IMAGE);
 
         break;
       }
@@ -285,7 +335,9 @@ public:
         //Neglect other tracker
         tracker.IBVS.Null_Control(); tracker.established = false;
         //show image:
-        cv::imshow(OPENCV_WINDOW, aruco.output_image);
+        //cv::imshow(OPENCV_WINDOW, aruco.output_image);
+        cv::resize(aruco.output_image, OUTPUT_IMAGE, cv::Size(), scale, scale);
+        cv::imshow(OPENCV_WINDOW, OUTPUT_IMAGE);
         break;
       }
     }

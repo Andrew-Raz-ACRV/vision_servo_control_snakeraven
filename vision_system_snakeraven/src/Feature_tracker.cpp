@@ -56,7 +56,7 @@ void Feature_tracker::passive_mode(const Mat image)
 /*
 Draws the feature error vector from the image and compute the IBVS control law
 */
-void Feature_tracker::draw_feature_tracking(const Mat image, int state)
+void Feature_tracker::draw_feature_tracking(const Mat image, int state, std::vector<double> Vteleop)
 {
     //Prepare Feature error vector:
     deltaU.clear();
@@ -92,26 +92,59 @@ void Feature_tracker::draw_feature_tracking(const Mat image, int state)
                 //Get match keypoint index:
                 id = inlier_matches[i].trainIdx;
 
-                //Calculate Radius 
-                R = sqrt((pow(keypoints[id].pt.y - center.y,2.0) + pow(keypoints[id].pt.x - center.x,2.0)));
-                //x^2 + y^2 > r^2 outside circle?
-                if (R > radius)
+                //
+                if (use_vpc==1)
                 {
-                    //Draw line from point drawing it to center
-                    drawline(trackerimage, center, keypoints[id].pt);
-
-                    //Determine the feature Error from circle:
-                    magnitude = R - radius;
-                    //deltas and position in x and y direction appended
-                    deltaU.push_back(-magnitude*(keypoints[id].pt.x - center.x)/R);
-                    deltaV.push_back(-magnitude*(keypoints[id].pt.y - center.y)/R);
+                    //VPC acts preemptively by prediction so it needs u,v points regardless of in or out circle
                     posU.push_back(keypoints[id].pt.x);
                     posV.push_back(keypoints[id].pt.y);
+                    //Calculate Radius 
+                    R = sqrt((pow(keypoints[id].pt.y - center.y,2.0) + pow(keypoints[id].pt.x - center.x,2.0)));
+                    //x^2 + y^2 > r^2 outside circle?
+                    if (R > radius)
+                    {
+                        //Draw line from point drawing it to center
+                        drawline(trackerimage, center, keypoints[id].pt);
+
+                        //Determine the feature Error from circle:
+                        magnitude = R - radius;
+                        //deltas and position in x and y direction appended
+                        deltaU.push_back(-magnitude*(keypoints[id].pt.x - center.x)/R);
+                        deltaV.push_back(-magnitude*(keypoints[id].pt.y - center.y)/R);
+                    }
+                    else{
+                        //Its in the circle no error
+                        //deltas and position in x and y direction appended
+                        deltaU.push_back(0);
+                        deltaV.push_back(0);
+                    }
+
+
+                }
+                else{
+                    //Original classical, only accumulate U and V if there is an error
+                    //Calculate Radius 
+                    R = sqrt((pow(keypoints[id].pt.y - center.y,2.0) + pow(keypoints[id].pt.x - center.x,2.0)));
+                    //x^2 + y^2 > r^2 outside circle?
+                    if (R > radius)
+                    {
+                        //Draw line from point drawing it to center
+                        drawline(trackerimage, center, keypoints[id].pt);
+
+                        //Determine the feature Error from circle:
+                        magnitude = R - radius;
+                        //deltas and position in x and y direction appended
+                        deltaU.push_back(-magnitude*(keypoints[id].pt.x - center.x)/R);
+                        deltaV.push_back(-magnitude*(keypoints[id].pt.y - center.y)/R);
+                        posU.push_back(keypoints[id].pt.x);
+                        posV.push_back(keypoints[id].pt.y);
+                    }
+                    
                 }
 
             }
             //COMPUTE IBVS CONTROL LAW
-            IBVS.Compute_Control_law(posU,posV,deltaU,deltaV);
+            IBVS.Compute_Control_law(posU,posV,deltaU,deltaV,Vteleop,center.x,center.y,radius);
 
             //cout << "Wc = " << IBVS.Wc.transpose() << endl;
 
@@ -137,7 +170,7 @@ void Feature_tracker::drawline(const Mat img, Point start, Point end )
 /*
 Detect keypoints and try to match then to target_keypoints
 */
-void Feature_tracker::track_target_keypoints(const Mat image){
+void Feature_tracker::track_target_keypoints(const Mat image, std::vector<double> V_tele){
 
 	//Convert to Grayscale before feature detection
     cvtColor(image, greyimage, CV_BGR2GRAY);
@@ -172,18 +205,18 @@ void Feature_tracker::track_target_keypoints(const Mat image){
 
             //Draw matched keypoints target image
             //draw_matches_cases(image,2);
-            draw_feature_tracking(image,2);
+            draw_feature_tracking(image,2,V_tele);
         }
         else{
             //Draw no matches keypoints target image
             //draw_matches_cases(image,1);
-            draw_feature_tracking(image,1);
+            draw_feature_tracking(image,1,V_tele);
         } 
     }
     else{
             //Draw scenario of no matches
             //draw_matches_cases(image,0);
-            draw_feature_tracking(image,0);
+            draw_feature_tracking(image,0,V_tele);
     } 
 }
 

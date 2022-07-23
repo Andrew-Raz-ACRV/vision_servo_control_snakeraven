@@ -80,11 +80,11 @@ public:
 	//Establishes the target image features to stay inside the circle in frame 1:
 	void establish_target_keypoints(const Mat image);
 	//Detect features and try to match to target keypoints
-	void track_target_keypoints(const Mat image);
+	void track_target_keypoints(const Mat image, std::vector<double> V_tele);
 	//Draw Feature Matches
 	void draw_matches_cases(const Mat image, int state);
 	//Draw feature Error
-	void draw_feature_tracking(const Mat image, int state);
+	void draw_feature_tracking(const Mat image, int state, std::vector<double> V_tele);
 	void drawline(const Mat img, Point start, Point end );
 	//Passive mode for inactive IBVS control:
 	void passive_mode(const Mat image);

@@ -26,9 +26,11 @@ IBVS_orientation_control::IBVS_orientation_control() {
 
 	//Set velocity to be zero initially:
 	Wc = MatrixXd::Zero(3,1);
+	Vc = MatrixXd::Zero(3,1);
 
 	//Error is all zero:
 	Error = MatrixXd::Zero(2 * Max_features, 1);
+	s_k = MatrixXd::Zero(2 * Max_features, 1);
 
 	//Set Lambda gain:
 	lambda = 1;//2;
@@ -80,7 +82,7 @@ MatrixXd IBVS_orientation_control::orientation_image_jacobian(float x, float y){
 	return Jw_xy;
 }
 
-void IBVS_orientation_control::Compute_Control_law(std::vector<double> posU, std::vector<double> posV, std::vector<double> deltaU, std::vector<double> deltaV){
+void IBVS_orientation_control::Compute_Control_law(std::vector<double> posU, std::vector<double> posV, std::vector<double> deltaU, std::vector<double> deltaV, std::vector<double> Vteleop, double c1, double c2, double r){
 
 	//Go through each feature error
 	if (deltaU.empty())
@@ -114,20 +116,67 @@ void IBVS_orientation_control::Compute_Control_law(std::vector<double> posU, std
 			Error(2 * i)     = x_dot;
 			Error(2 * i + 1) = y_dot;
 
-			//Compute Image Jacobian for that point feature:
-			Jw.block(2 * i, 0, 2, 3) = orientation_image_jacobian(x,y);
+			if (use_vpc==1)
+			{
+				//Put feature position into feature vector
+				s_k(2 * i)     = x;
+				s_k(2 * i + 1) = y;
+			}
+			else{
+				//Compute Image Jacobian for that point feature:
+				Jw.block(2 * i, 0, 2, 3) = orientation_image_jacobian(x,y);				
+			}
+
 		}
 
-		//Compute The output angular velocity for the current set of features:
-		MatrixXd Ls = Jw.block(0, 0, 2 * curr_features, 3);
-		MatrixXd deltaS = Error.block(0, 0, 2 * curr_features, 1);
+		//Solve Wc either classical or VPC
 
-		//Moore Penrose Pseudo Inverse
-		//Wc = lambda * Ls^-1 deltaS
-		//Wc = lambda * (Ls.transpose()*Ls).inverse()*(Ls.transpose()*deltaS);
+		if (use_vpc==1)
+		{
+			//VPC Approach
+			//Get control problem data it needs s = [x, y, ...] and teleop v translation
+			for (int i = 0; i < 3; ++i)
+			{
+				Vc(i) = Vteleop[i];
+			}
 
-		//More Sophisticated Eigen approach:
-		Wc = lambda * Ls.completeOrthogonalDecomposition().solve(deltaS);
+			//Get circle data to anticipate future error
+			vpc_controller.get_circle_data((c1-u0)*pu/fx, (c2-u0)*pu/fx, r*pu/fx);
+
+			vpc_controller.get_s_v(s_k.block(0, 0, 2 * curr_features, 1), Vc);
+			functor.a = vpc_controller;
+
+			//Compute Gradient and use Levenburg Marquardt
+			Eigen::NumericalDiff<cost_function_v2> numDiff(functor);
+			Eigen::LevenbergMarquardt<Eigen::NumericalDiff<cost_function_v2>, double> lm(numDiff);
+			lm.parameters.maxfev = 2000;
+			lm.parameters.xtol = 1.0e-10;
+			
+			//Minimise
+			int ret = lm.minimize(vpc_controller.U);
+
+			//Only use the first input vector * a scaling gain
+			Wc = 10*vpc_controller.U.block(0, 0, 3, 1);
+			Wc(2) = 0;
+			cout << "Wc = " << Wc.transpose() << endl;
+
+			//string text;
+			//cout << "Paused debugger" << endl;
+			//cin >> text;
+		}
+		else{
+			//Compute The output angular velocity for the current set of features:
+			MatrixXd Ls = Jw.block(0, 0, 2 * curr_features, 3);
+			MatrixXd deltaS = Error.block(0, 0, 2 * curr_features, 1);
+
+			//Moore Penrose Pseudo Inverse
+			//Wc = lambda * Ls^-1 deltaS
+			//Wc = lambda * (Ls.transpose()*Ls).inverse()*(Ls.transpose()*deltaS);
+
+			//More Sophisticated Eigen approach:
+			Wc = lambda * Ls.completeOrthogonalDecomposition().solve(deltaS);
+		}
+
 
 		//Restrict velocity magnitude:
 		for (int i = 0; i < 3; i++)
