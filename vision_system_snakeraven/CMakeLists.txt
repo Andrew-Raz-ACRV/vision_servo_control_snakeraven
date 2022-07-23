@@ -153,7 +153,8 @@ add_executable(imageprocessor
 src/image_converter.cpp 
 src/Feature_tracker.cpp 
 src/IBVS_orientation_control.cpp 
-src/aruco_tracker.cpp)
+src/aruco_tracker.cpp
+src/vpc.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
