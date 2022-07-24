@@ -20,6 +20,7 @@ The vision_servo_control_snakeraven uses Eigen to compute the kinematics and con
 ## Contact
 
 This code is written by Andrew Razjigaev. If there are queries you can contact him via email: andrew_razjigaev@outlook.com
+Terminal Commands to run the code is available on the SnakeRavenDemo.pdf
 
 ## Relavent links:
 1. **snake_raven_controller** : This is an expansion on from the original [controller](https://github.com/Andrew-Raz-ACRV/snake_raven_controller)
